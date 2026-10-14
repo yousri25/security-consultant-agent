@@ -472,57 +472,73 @@ TOOL_INFO = [
 
 CSS = """
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-:root{--ac:#2f5bea;--ac2:#1f3fb8;--ink:#1b2433;--mut:#6b7a90;--line:#e3e8f0;--card:#ffffff;--soft:#eef3ff;--ok:#16a34a}
-html,body,.stApp,[data-testid="stSidebar"] *{font-family:'Inter','Segoe UI',system-ui,sans-serif}
-.stApp{background:linear-gradient(180deg,#f7f9fc 0%,#eef2f8 100%)}
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=JetBrains+Mono:wght@400;600&display=swap');
+:root{--cy:#00f0ff;--vi:#8b5cf6;--gr:#00ffa3;--bg:#05070d;--glass:rgba(10,16,30,.62);--line:rgba(0,240,255,.18)}
+
+/* background: faint grid + glow */
+.stApp{background:
+  radial-gradient(900px 500px at 85% -10%,rgba(139,92,246,.18),transparent 60%),
+  radial-gradient(800px 500px at -10% 10%,rgba(0,240,255,.12),transparent 60%),
+  linear-gradient(rgba(0,240,255,.035) 1px,transparent 1px),
+  linear-gradient(90deg,rgba(0,240,255,.035) 1px,transparent 1px),
+  var(--bg);
+  background-size:auto,auto,44px 44px,44px 44px,auto}
 [data-testid="stHeader"]{background:transparent}
-.block-container{max-width:880px;padding-top:2.2rem}
+.block-container{max-width:900px;padding-top:2rem}
 
 /* hero */
-.hero{padding:.4rem 0 1.3rem;margin-bottom:.5rem;border-bottom:1px solid var(--line)}
-.status{display:inline-flex;align-items:center;gap:.5rem;padding:.2rem .7rem;border-radius:999px;
-  background:#ecfdf3;border:1px solid #c6f0d6;color:#166534;font-size:.74rem;font-weight:600}
-.dot{width:7px;height:7px;border-radius:50%;background:var(--ok);display:inline-block}
-.hero h1{margin:.8rem 0 .25rem;font-size:2.1rem;font-weight:700;letter-spacing:-.02em;color:var(--ink)}
-.hero h1 span{color:var(--ac)}
-.hero .sub{color:var(--mut);font-size:1rem;margin-bottom:.8rem}
-.chip{display:inline-block;padding:.18rem .7rem;margin:0 .4rem .2rem 0;border-radius:999px;
-  background:var(--soft);color:var(--ac2);font-size:.74rem;font-weight:600}
-.note{color:var(--mut);font-size:.8rem;margin-top:.6rem}
+.hero{position:relative;padding:1.4rem 0 1.1rem;margin-bottom:.6rem}
+.hero::after{content:"";position:absolute;left:0;bottom:0;height:2px;width:100%;
+  background:linear-gradient(90deg,transparent,var(--cy),var(--vi),transparent);
+  background-size:200% 100%;animation:sweep 5s linear infinite}
+@keyframes sweep{0%{background-position:200% 0}100%{background-position:-200% 0}}
+.status{font:600 .72rem 'JetBrains Mono',monospace;letter-spacing:.18em;color:var(--gr);margin-bottom:.5rem}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--gr);margin-right:.55rem;
+  box-shadow:0 0 10px var(--gr);animation:pulse 1.6s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.35;transform:scale(.7)}}
+.hero h1{margin:0;font:900 2.5rem 'Orbitron','Segoe UI',sans-serif;letter-spacing:.06em;line-height:1.1;
+  background:linear-gradient(90deg,#fff 0%,var(--cy) 45%,var(--vi) 100%);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+  filter:drop-shadow(0 0 14px rgba(0,240,255,.35))}
+.hero .sub{margin:.55rem 0 .7rem;color:#8ea3bd;font:400 .95rem 'JetBrains Mono',monospace}
+.chip{display:inline-block;padding:.12rem .65rem;margin:0 .4rem .2rem 0;border-radius:4px;
+  border:1px solid var(--line);color:var(--cy);font:600 .68rem 'JetBrains Mono',monospace;letter-spacing:.12em}
+.note{color:#5d718a;font:400 .72rem 'JetBrains Mono',monospace;margin-top:.5rem}
 
 /* section labels */
-.sec{margin:1rem 0 .35rem;font-size:.72rem;font-weight:700;letter-spacing:.09em;
-  text-transform:uppercase;color:var(--mut)}
-.cap{font-size:.84rem;color:var(--mut);margin:.35rem 0;line-height:1.4}
-.cap b{color:var(--ink)}
+.sec{margin:.9rem 0 .3rem;font:600 .7rem 'JetBrains Mono',monospace;letter-spacing:.2em;
+  text-transform:uppercase;color:var(--cy);opacity:.85}
+.sec::before{content:"// ";opacity:.5}
+.cap{font-size:.82rem;color:#9db0c7;margin:.25rem 0}
+.cap b{color:#e6edf7}
 
-/* chat */
-[data-testid="stChatMessage"]{background:var(--card);border:1px solid var(--line);border-radius:14px;
-  padding:1rem 1.15rem;margin-bottom:.75rem;box-shadow:0 1px 2px rgba(20,30,60,.04),0 6px 18px -10px rgba(20,30,60,.12)}
-[data-testid="stChatMessage"]:has([data-testid="stChatMessageAvatarUser"]){background:var(--soft);border-color:#dbe5ff}
-[data-testid="stChatMessage"]:has([data-testid="stChatMessageAvatarAssistant"]){border-left:3px solid var(--ac)}
+/* chat = glass panels */
+[data-testid="stChatMessage"]{background:var(--glass);border:1px solid var(--line);border-radius:14px;
+  backdrop-filter:blur(8px);padding:1rem 1.1rem;margin-bottom:.7rem}
+[data-testid="stChatMessage"]:has([data-testid="stChatMessageAvatarAssistant"]){border-left:3px solid var(--cy);
+  box-shadow:-8px 0 24px -14px var(--cy)}
+[data-testid="stChatMessage"]:has([data-testid="stChatMessageAvatarUser"]){border-left:3px solid var(--vi)}
 
 /* input */
-[data-testid="stChatInput"]{background:#fff;border:1px solid var(--line);border-radius:14px;
-  box-shadow:0 4px 18px -10px rgba(20,30,60,.2)}
-[data-testid="stChatInput"]:focus-within{border-color:var(--ac);box-shadow:0 0 0 3px rgba(47,91,234,.15)}
+[data-testid="stChatInput"]{border:1px solid var(--line);border-radius:14px;background:rgba(8,12,24,.85)}
+[data-testid="stChatInput"]:focus-within{border-color:var(--cy);box-shadow:0 0 0 1px var(--cy),0 0 22px rgba(0,240,255,.25)}
 
 /* buttons */
-.stButton>button,.stDownloadButton>button{background:#fff;color:var(--ink);border:1px solid var(--line);
-  border-radius:10px;font-weight:600;font-size:.84rem;transition:all .15s}
-.stButton>button:hover,.stDownloadButton>button:hover{border-color:var(--ac);color:var(--ac);
-  box-shadow:0 4px 14px -8px rgba(47,91,234,.5)}
-.stButton>button[kind="primary"]{background:var(--ac);color:#fff;border:1px solid var(--ac)}
-.stButton>button[kind="primary"]:hover{background:var(--ac2);color:#fff;border-color:var(--ac2)}
+.stButton>button,.stDownloadButton>button{background:transparent;color:#d8e6f5;border:1px solid var(--line);
+  border-radius:10px;font:600 .8rem 'JetBrains Mono',monospace;transition:all .2s}
+.stButton>button:hover,.stDownloadButton>button:hover{border-color:var(--cy);color:var(--cy);
+  box-shadow:0 0 16px rgba(0,240,255,.3);transform:translateY(-1px)}
+.stButton>button[kind="primary"]{background:linear-gradient(90deg,var(--cy),var(--vi));color:#03060c;border:none;
+  box-shadow:0 0 18px rgba(0,240,255,.35)}
+.stButton>button[kind="primary"]:hover{color:#03060c;box-shadow:0 0 28px rgba(139,92,246,.55)}
 
 /* containers */
-[data-testid="stExpander"]{border:1px solid var(--line);border-radius:10px;background:#fff}
-[data-testid="stVerticalBlockBorderWrapper"]:has(.report-mark){border-color:#cfdbff!important;
-  background:#fff;box-shadow:0 8px 28px -16px rgba(47,91,234,.45)}
-[data-testid="stSidebar"]{background:#fff;border-right:1px solid var(--line)}
-[data-testid="stProgress"] div[role="progressbar"]>div{background:var(--ac)}
-::-webkit-scrollbar{width:8px}::-webkit-scrollbar-thumb{background:#cdd6e4;border-radius:8px}
+[data-testid="stExpander"]{border:1px solid var(--line);border-radius:10px;background:rgba(10,16,30,.45)}
+[data-testid="stVerticalBlockBorderWrapper"]:has(.report-mark){border-color:var(--cy)!important;
+  box-shadow:0 0 28px -10px var(--cy);background:var(--glass)}
+[data-testid="stSidebar"]{background:linear-gradient(180deg,#070b16,#05070d);border-right:1px solid var(--line)}
+[data-testid="stProgress"] div[role="progressbar"]>div{background:linear-gradient(90deg,var(--cy),var(--vi))}
+::-webkit-scrollbar{width:8px}::-webkit-scrollbar-thumb{background:#14304a;border-radius:8px}
 </style>
 """
 
@@ -582,22 +598,22 @@ with st.sidebar:
 
 # ---- Main ------------------------------------------------------------------
 st.markdown(
-    '<div class="hero"><span class="status"><span class="dot"></span>Online · answers are reviewed</span>'
-    '<h1>Security <span>Consultant</span></h1>'
-    '<div class="sub">Practical security advice, backed by real threat data.</div>'
-    '<span class="chip">Live data</span><span class="chip">AI-reviewed</span><span class="chip">Exportable reports</span>'
-    '<div class="note">Check only your own or a test email, and never type real passwords or secrets.</div></div>',
+    '<div class="hero"><div class="status"><span class="dot"></span>SYSTEM ONLINE · REVIEWER ACTIVE</div>'
+    '<h1>SECURITY CONSULTANT</h1>'
+    '<div class="sub">Real threat data. Verified answers.</div>'
+    '<span class="chip">LIVE DATA</span><span class="chip">AI-REVIEWED</span><span class="chip">EXPORTABLE</span>'
+    '<div class="note">Check only your own or a test email. Never type real passwords or secrets.</div></div>',
     unsafe_allow_html=True)
 
 welcome = st.empty()
 if not st.session_state.messages:
     with welcome.container():
-        st.markdown('<div class="sec">Quick start</div>', unsafe_allow_html=True)
+        st.markdown('<div class="sec">Quick scan</div>', unsafe_allow_html=True)
         cols = st.columns(len(TOOL_INFO))
         for col, (_, icon, title, _s, _d, example) in zip(cols, TOOL_INFO):
             if col.button(f"{icon} {title}", help=example, use_container_width=True):
                 st.session_state.queued = example
-        st.markdown('<div class="note">Or describe your setup below to get a tailored assessment.</div>',
+        st.markdown('<div class="note">…or describe your setup below and get a tailored assessment.</div>',
                     unsafe_allow_html=True)
 
 for m in st.session_state.messages:
