@@ -432,14 +432,15 @@ def report_to_html(md_text):
     return f"""<!doctype html><html><head><meta charset="utf-8">
 <title>Security Assessment Report</title>
 <style>
-body{{font-family:Segoe UI,Arial,sans-serif;max-width:860px;margin:2rem auto;padding:0 1rem;color:#1b2433;line-height:1.55}}
-h1{{border-bottom:3px solid #00b37e;padding-bottom:.4rem}}
-h2{{color:#0b5d49;margin-top:1.8rem}}
+body{{font-family:Inter,Segoe UI,Arial,sans-serif;max-width:860px;margin:2rem auto;padding:2rem 1.5rem;
+  background:#FBF7EF;color:#2E2A22;line-height:1.55}}
+h1{{font-family:Georgia,serif;border-bottom:3px solid #3A8153;padding-bottom:.4rem}}
+h2{{color:#2F6E45;margin-top:1.8rem}}
 table{{border-collapse:collapse;width:100%;margin:1rem 0}}
-th,td{{border:1px solid #cfd8e3;padding:.45rem .6rem;text-align:left;vertical-align:top}}
-th{{background:#eaf7f2}}
-hr{{border:none;border-top:1px solid #cfd8e3;margin-top:2rem}}
-@media print{{body{{margin:0}}}}
+th,td{{border:1px solid #DDD0B9;padding:.45rem .6rem;text-align:left;vertical-align:top}}
+th{{background:#DDE9D8}}
+hr{{border:none;border-top:1px solid #DDD0B9;margin-top:2rem}}
+@media print{{body{{margin:0;padding:0}}}}
 </style></head><body>{body}</body></html>"""
 
 
@@ -472,73 +473,79 @@ TOOL_INFO = [
 
 CSS = """
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=JetBrains+Mono:wght@400;600&display=swap');
-:root{--cy:#00f0ff;--vi:#8b5cf6;--gr:#00ffa3;--bg:#05070d;--glass:rgba(10,16,30,.62);--line:rgba(0,240,255,.18)}
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Inter:wght@400;500;600&display=swap');
+:root{
+  --bg:#F4EDE0;        /* light beige page */
+  --surface:#FBF7EF;   /* cards, chat bubbles */
+  --sidebar:#EBE1CF;   /* deeper beige */
+  --line:#DDD0B9;      /* warm borders */
+  --tan:#C4AE88;       /* user accent */
+  --ink:#2E2A22;       /* warm near-black */
+  --muted:#6F6755;     /* secondary text */
+  --green:#3A8153;     /* main green */
+  --green-dk:#2F6E45;  /* hover / headings */
+  --green-soft:#DDE9D8;/* tints */
+}
+html,body,.stApp{font-family:'Inter','Segoe UI',sans-serif}
 
-/* background: faint grid + glow */
+/* background: flat beige with a faint green glow */
 .stApp{background:
-  radial-gradient(900px 500px at 85% -10%,rgba(139,92,246,.18),transparent 60%),
-  radial-gradient(800px 500px at -10% 10%,rgba(0,240,255,.12),transparent 60%),
-  linear-gradient(rgba(0,240,255,.035) 1px,transparent 1px),
-  linear-gradient(90deg,rgba(0,240,255,.035) 1px,transparent 1px),
-  var(--bg);
-  background-size:auto,auto,44px 44px,44px 44px,auto}
+  radial-gradient(900px 480px at 92% -8%,rgba(58,129,83,.09),transparent 60%),
+  var(--bg)}
 [data-testid="stHeader"]{background:transparent}
 .block-container{max-width:900px;padding-top:2rem}
 
 /* hero */
-.hero{position:relative;padding:1.4rem 0 1.1rem;margin-bottom:.6rem}
+.hero{position:relative;padding:1.3rem 0 1.2rem;margin-bottom:.6rem}
 .hero::after{content:"";position:absolute;left:0;bottom:0;height:2px;width:100%;
-  background:linear-gradient(90deg,transparent,var(--cy),var(--vi),transparent);
-  background-size:200% 100%;animation:sweep 5s linear infinite}
-@keyframes sweep{0%{background-position:200% 0}100%{background-position:-200% 0}}
-.status{font:600 .72rem 'JetBrains Mono',monospace;letter-spacing:.18em;color:var(--gr);margin-bottom:.5rem}
-.dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--gr);margin-right:.55rem;
-  box-shadow:0 0 10px var(--gr);animation:pulse 1.6s ease-in-out infinite}
-@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.35;transform:scale(.7)}}
-.hero h1{margin:0;font:900 2.5rem 'Orbitron','Segoe UI',sans-serif;letter-spacing:.06em;line-height:1.1;
-  background:linear-gradient(90deg,#fff 0%,var(--cy) 45%,var(--vi) 100%);
-  -webkit-background-clip:text;-webkit-text-fill-color:transparent;
-  filter:drop-shadow(0 0 14px rgba(0,240,255,.35))}
-.hero .sub{margin:.55rem 0 .7rem;color:#8ea3bd;font:400 .95rem 'JetBrains Mono',monospace}
-.chip{display:inline-block;padding:.12rem .65rem;margin:0 .4rem .2rem 0;border-radius:4px;
-  border:1px solid var(--line);color:var(--cy);font:600 .68rem 'JetBrains Mono',monospace;letter-spacing:.12em}
-.note{color:#5d718a;font:400 .72rem 'JetBrains Mono',monospace;margin-top:.5rem}
+  background:linear-gradient(90deg,var(--green),rgba(58,129,83,.25) 60%,transparent)}
+.status{display:inline-flex;align-items:center;padding:.18rem .75rem;border-radius:999px;
+  background:var(--green-soft);color:var(--green-dk);font:600 .72rem 'Inter',sans-serif;
+  letter-spacing:.04em;margin-bottom:.7rem}
+.dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--green);margin-right:.5rem;
+  animation:pulse 2.2s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+.hero h1{margin:0;font:700 2.4rem 'Fraunces',Georgia,serif;letter-spacing:-.01em;line-height:1.15;color:var(--ink)}
+.hero .sub{margin:.5rem 0 .8rem;color:var(--muted);font:400 1rem 'Inter',sans-serif}
+.chip{display:inline-block;padding:.14rem .7rem;margin:0 .4rem .2rem 0;border-radius:999px;
+  border:1px solid var(--line);background:var(--surface);color:var(--green-dk);
+  font:600 .68rem 'Inter',sans-serif;letter-spacing:.08em}
+.note{color:var(--muted);font:400 .78rem 'Inter',sans-serif;margin-top:.5rem}
 
 /* section labels */
-.sec{margin:.9rem 0 .3rem;font:600 .7rem 'JetBrains Mono',monospace;letter-spacing:.2em;
-  text-transform:uppercase;color:var(--cy);opacity:.85}
-.sec::before{content:"// ";opacity:.5}
-.cap{font-size:.82rem;color:#9db0c7;margin:.25rem 0}
-.cap b{color:#e6edf7}
+.sec{margin:.9rem 0 .3rem;font:600 .7rem 'Inter',sans-serif;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--green-dk)}
+.cap{font-size:.82rem;color:var(--muted);margin:.35rem 0}
+.cap b{color:var(--ink)}
 
-/* chat = glass panels */
-[data-testid="stChatMessage"]{background:var(--glass);border:1px solid var(--line);border-radius:14px;
-  backdrop-filter:blur(8px);padding:1rem 1.1rem;margin-bottom:.7rem}
-[data-testid="stChatMessage"]:has([data-testid="stChatMessageAvatarAssistant"]){border-left:3px solid var(--cy);
-  box-shadow:-8px 0 24px -14px var(--cy)}
-[data-testid="stChatMessage"]:has([data-testid="stChatMessageAvatarUser"]){border-left:3px solid var(--vi)}
+/* chat = soft cards */
+[data-testid="stChatMessage"]{background:var(--surface);border:1px solid var(--line);border-radius:14px;
+  padding:1rem 1.1rem;margin-bottom:.7rem;box-shadow:0 1px 2px rgba(60,45,20,.05)}
+[data-testid="stChatMessage"]:has([data-testid="stChatMessageAvatarAssistant"]){border-left:4px solid var(--green)}
+[data-testid="stChatMessage"]:has([data-testid="stChatMessageAvatarUser"]){border-left:4px solid var(--tan);background:#F8F1E3}
 
 /* input */
-[data-testid="stChatInput"]{border:1px solid var(--line);border-radius:14px;background:rgba(8,12,24,.85)}
-[data-testid="stChatInput"]:focus-within{border-color:var(--cy);box-shadow:0 0 0 1px var(--cy),0 0 22px rgba(0,240,255,.25)}
+[data-testid="stChatInput"]{border:1px solid var(--line);border-radius:14px;background:var(--surface)}
+[data-testid="stChatInput"]:focus-within{border-color:var(--green);box-shadow:0 0 0 2px rgba(58,129,83,.22)}
 
 /* buttons */
-.stButton>button,.stDownloadButton>button{background:transparent;color:#d8e6f5;border:1px solid var(--line);
-  border-radius:10px;font:600 .8rem 'JetBrains Mono',monospace;transition:all .2s}
-.stButton>button:hover,.stDownloadButton>button:hover{border-color:var(--cy);color:var(--cy);
-  box-shadow:0 0 16px rgba(0,240,255,.3);transform:translateY(-1px)}
-.stButton>button[kind="primary"]{background:linear-gradient(90deg,var(--cy),var(--vi));color:#03060c;border:none;
-  box-shadow:0 0 18px rgba(0,240,255,.35)}
-.stButton>button[kind="primary"]:hover{color:#03060c;box-shadow:0 0 28px rgba(139,92,246,.55)}
+.stButton>button,.stDownloadButton>button{background:var(--surface);color:var(--ink);border:1px solid var(--line);
+  border-radius:10px;font:600 .82rem 'Inter',sans-serif;transition:all .18s}
+.stButton>button:hover,.stDownloadButton>button:hover{border-color:var(--green);color:var(--green-dk);
+  background:var(--green-soft);transform:translateY(-1px)}
+.stButton>button[kind="primary"]{background:var(--green);color:#fff;border:1px solid var(--green)}
+.stButton>button[kind="primary"] p{color:#fff}
+.stButton>button[kind="primary"]:hover{background:var(--green-dk);border-color:var(--green-dk);color:#fff;
+  box-shadow:0 4px 12px rgba(47,110,69,.28)}
+.stButton>button:disabled{opacity:.5}
 
 /* containers */
-[data-testid="stExpander"]{border:1px solid var(--line);border-radius:10px;background:rgba(10,16,30,.45)}
-[data-testid="stVerticalBlockBorderWrapper"]:has(.report-mark){border-color:var(--cy)!important;
-  box-shadow:0 0 28px -10px var(--cy);background:var(--glass)}
-[data-testid="stSidebar"]{background:linear-gradient(180deg,#070b16,#05070d);border-right:1px solid var(--line)}
-[data-testid="stProgress"] div[role="progressbar"]>div{background:linear-gradient(90deg,var(--cy),var(--vi))}
-::-webkit-scrollbar{width:8px}::-webkit-scrollbar-thumb{background:#14304a;border-radius:8px}
+[data-testid="stExpander"]{border:1px solid var(--line);border-radius:10px;background:var(--surface)}
+[data-testid="stVerticalBlockBorderWrapper"]:has(.report-mark){border-color:var(--green)!important;
+  background:var(--surface);box-shadow:0 6px 22px -12px rgba(47,110,69,.45)}
+[data-testid="stSidebar"]{background:var(--sidebar);border-right:1px solid var(--line)}
+[data-testid="stProgress"] div[role="progressbar"]>div{background:var(--green)}
+::-webkit-scrollbar{width:8px}::-webkit-scrollbar-thumb{background:var(--tan);border-radius:8px}
 </style>
 """
 
@@ -598,8 +605,8 @@ with st.sidebar:
 
 # ---- Main ------------------------------------------------------------------
 st.markdown(
-    '<div class="hero"><div class="status"><span class="dot"></span>SYSTEM ONLINE · REVIEWER ACTIVE</div>'
-    '<h1>SECURITY CONSULTANT</h1>'
+    '<div class="hero"><div class="status"><span class="dot"></span>Reviewer active</div>'
+    '<h1>Security Consultant</h1>'
     '<div class="sub">Real threat data. Verified answers.</div>'
     '<span class="chip">LIVE DATA</span><span class="chip">AI-REVIEWED</span><span class="chip">EXPORTABLE</span>'
     '<div class="note">Check only your own or a test email. Never type real passwords or secrets.</div></div>',
