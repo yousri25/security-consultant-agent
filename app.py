@@ -542,13 +542,12 @@ html,body,.stApp{font-family:'Inter','Segoe UI',sans-serif}
 /* buttons */
 .stButton>button,.stDownloadButton>button{background:var(--surface);color:var(--ink);border:1px solid var(--line);
   border-radius:10px;font:600 .82rem 'Inter',sans-serif;transition:all .18s}
-.stButton>button:hover,.stDownloadButton>button:hover{border-color:var(--green);color:var(--green-dk);
-  background:var(--green-soft);transform:translateY(-1px)}
+.stButton>button:hover,.stDownloadButton>button:hover{border-color:var(--green);color:#fff;
+  background:var(--green);transform:translateY(-1px);box-shadow:0 4px 12px rgba(47,110,69,.30)}
 .stButton>button[kind="primary"]{background:var(--green);color:#fff;border:1px solid var(--green)}
 .stButton>button[kind="primary"] p{color:#fff}
 .stButton>button[kind="primary"]:hover{background:var(--green-dk);border-color:var(--green-dk);color:#fff;
   box-shadow:0 4px 12px rgba(47,110,69,.28)}
-.stButton>button:disabled{opacity:.5}
 
 /* containers */
 [data-testid="stExpander"]{border:1px solid var(--line);border-radius:10px;background:var(--surface)}
@@ -566,6 +565,40 @@ html,body,.stApp{font-family:'Inter','Segoe UI',sans-serif}
 [data-testid="stProgress"] div[role="progressbar"]{background:var(--line)}
 [data-testid="stProgress"] div[role="progressbar"]>div{background:var(--green)}
 ::-webkit-scrollbar{width:8px}::-webkit-scrollbar-thumb{background:var(--tan);border-radius:8px}
+
+/* ---- force readable colors (works even if Streamlit falls back to dark theme) ---- */
+html{color-scheme:light}
+.stApp :is(p,li,label,span,h1,h2,h3,h4,h5,h6,summary,td,th,
+  [data-testid="stMarkdownContainer"],[data-testid="stCaptionContainer"],[data-testid="stWidgetLabel"]){color:var(--ink)!important}
+.stApp [data-testid="stCaptionContainer"] :is(p,span){color:var(--muted)!important}
+.stApp .hero .sub,.stApp .hero .note,.stApp .note{color:var(--muted)!important}
+.stApp .hero .chip{color:var(--green-dk)!important}
+.stApp .hero .status{color:var(--green-dk)!important}
+.stApp .sec{color:var(--green-dk)!important}
+.stApp .cap{color:var(--muted)!important}
+.stApp .cap b{color:var(--ink)!important}
+.stApp [data-testid="stExpander"] svg{color:var(--green-dk)!important}
+.stApp code{background:#EFE6D4!important;color:var(--green-dk)!important}
+.stApp pre{background:#EFE6D4!important}
+.stApp pre code{color:var(--ink)!important}
+.stApp th{background:var(--green-soft)!important}
+.stApp td{background:transparent!important}
+.stApp :is(th,td){border-color:var(--line)!important}
+
+/* ---- buttons: always readable, clear green hover ---- */
+.stApp .stButton>button *,.stApp .stDownloadButton>button *{color:var(--ink)!important}
+.stApp .stButton>button:not(:disabled):hover *,
+.stApp .stDownloadButton>button:not(:disabled):hover *{color:#fff!important}
+.stApp .stButton>button[kind="primary"] *{color:#fff!important}
+.stApp .stButton>button:disabled,.stApp .stButton>button[kind="primary"]:disabled{
+  background:#E7DCC7!important;border:1px solid var(--line)!important;opacity:1!important;
+  cursor:not-allowed;box-shadow:none!important;transform:none!important}
+.stApp .stButton>button:disabled *{color:#8A826E!important}
+
+/* ---- expander headers: green highlight on hover ---- */
+.stApp [data-testid="stExpander"] summary{border-radius:10px;transition:background .15s}
+.stApp [data-testid="stExpander"] summary:hover{background:rgba(58,129,83,.16)}
+.stApp [data-testid="stExpander"] summary:hover :is(p,span,svg){color:var(--green-dk)!important}
 </style>
 """
 
