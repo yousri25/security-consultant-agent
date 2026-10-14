@@ -447,67 +447,100 @@ hr{{border:none;border-top:1px solid #cfd8e3;margin-top:2rem}}
 # UI content
 # ----------------------------------------------------------------------------
 CAPABILITIES = [
-    ("🎯", "Tailored risk assessment",
-     "Describe your setup and get main risks, a severity (low to critical) and prioritized fixes."),
-    ("🧪", "Live vulnerability intelligence",
-     "Looks up real CVEs and checks if they are exploited in the wild, so patching order is evidence-based."),
-    ("📧", "Email protection audit",
-     "Checks SPF, DMARC and DKIM to show how easy it is to spoof your domain."),
-    ("🕵️", "Breach exposure check",
-     "Checks whether an email address shows up in known data breaches."),
-    ("⚖️", "Reviewer model",
-     "A second model fact-checks every answer against the raw tool results before you see it."),
-    ("📄", "Exportable report",
-     "Turn the whole session into a structured report (Markdown or HTML, print to PDF)."),
+    ("🎯", "Risk assessment", "Main risks, severity (low to critical) and prioritized fixes for your setup."),
+    ("🧪", "Live vulnerability intel", "Real CVEs plus an exploited-in-the-wild check, so patch order is evidence-based."),
+    ("📧", "Email protection audit", "SPF, DMARC and DKIM review to show how easy your domain is to spoof."),
+    ("🕵️", "Breach exposure check", "Does an email address appear in known data breaches?"),
+    ("⚖️", "Reviewer model", "A second model fact-checks every answer against the raw tool output."),
+    ("📄", "Report export", "Turn the session into a structured report (Markdown or HTML)."),
 ]
 
 TOOL_INFO = [
     ("lookup_cve", "🔎", "CVE lookup", "NIST NVD",
      "Finds a CVE by ID or by product/version keyword, with CVSS score and description.",
      "Tell me about CVE-2021-44228"),
-    ("check_kev", "🚨", "Exploited-in-the-wild check", "CISA KEV",
+    ("check_kev", "🚨", "Exploited?", "CISA KEV",
      "Checks if a CVE is on CISA's Known Exploited Vulnerabilities list.",
      "Is CVE-2023-4863 being exploited in the wild?"),
-    ("check_email_domain_security", "📧", "Email domain security", "DNS (SPF / DMARC / DKIM)",
+    ("check_email_domain_security", "📧", "Email security", "DNS (SPF / DMARC / DKIM)",
      "Audits a domain's anti-spoofing and anti-phishing records.",
      "Check the email security of example.com"),
-    ("check_email_breach", "🕵️", "Email breach check", "XposedOrNot",
+    ("check_email_breach", "🕵️", "Breach check", "XposedOrNot",
      "Lists known data breaches that include an email address. Use your own or a test address.",
      "Has test@example.com been in a data breach?"),
 ]
 
 CSS = """
 <style>
-.hero{background:linear-gradient(135deg,#0f2a3d 0%,#0b1220 65%);border:1px solid #1d3a52;
-  border-radius:16px;padding:1.3rem 1.6rem;margin-bottom:1rem}
-.hero h1{margin:0;font-size:2rem;background:linear-gradient(90deg,#00e5a0,#4cc9f0);
-  -webkit-background-clip:text;-webkit-text-fill-color:transparent}
-.hero p{margin:.35rem 0 .8rem;color:#9fb3c8}
-.chip{display:inline-block;padding:.15rem .6rem;margin:0 .35rem .3rem 0;border-radius:999px;
-  background:#0d2a2a;border:1px solid #14574a;color:#5df2c3;font-size:.78rem}
-.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:.8rem;margin:.4rem 0 1rem}
-.card{background:#111a2e;border:1px solid #1e2c47;border-radius:12px;padding:.85rem 1rem}
-.card:hover{border-color:#00e5a0}
-.card h4{margin:0 0 .3rem;font-size:1rem}
-.card p{margin:0;color:#9fb3c8;font-size:.85rem}
-.card .src{display:inline-block;margin-top:.5rem;font-size:.72rem;color:#4cc9f0}
-.sec{margin:1rem 0 .2rem;font-weight:600;letter-spacing:.04em;text-transform:uppercase;
-  font-size:.8rem;color:#00e5a0}
-[data-testid="stSidebar"]{border-right:1px solid #1d3a52}
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=JetBrains+Mono:wght@400;600&display=swap');
+:root{--cy:#00f0ff;--vi:#8b5cf6;--gr:#00ffa3;--bg:#05070d;--glass:rgba(10,16,30,.62);--line:rgba(0,240,255,.18)}
+
+/* background: faint grid + glow */
+.stApp{background:
+  radial-gradient(900px 500px at 85% -10%,rgba(139,92,246,.18),transparent 60%),
+  radial-gradient(800px 500px at -10% 10%,rgba(0,240,255,.12),transparent 60%),
+  linear-gradient(rgba(0,240,255,.035) 1px,transparent 1px),
+  linear-gradient(90deg,rgba(0,240,255,.035) 1px,transparent 1px),
+  var(--bg);
+  background-size:auto,auto,44px 44px,44px 44px,auto}
+[data-testid="stHeader"]{background:transparent}
+.block-container{max-width:900px;padding-top:2rem}
+
+/* hero */
+.hero{position:relative;padding:1.4rem 0 1.1rem;margin-bottom:.6rem}
+.hero::after{content:"";position:absolute;left:0;bottom:0;height:2px;width:100%;
+  background:linear-gradient(90deg,transparent,var(--cy),var(--vi),transparent);
+  background-size:200% 100%;animation:sweep 5s linear infinite}
+@keyframes sweep{0%{background-position:200% 0}100%{background-position:-200% 0}}
+.status{font:600 .72rem 'JetBrains Mono',monospace;letter-spacing:.18em;color:var(--gr);margin-bottom:.5rem}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--gr);margin-right:.55rem;
+  box-shadow:0 0 10px var(--gr);animation:pulse 1.6s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.35;transform:scale(.7)}}
+.hero h1{margin:0;font:900 2.5rem 'Orbitron','Segoe UI',sans-serif;letter-spacing:.06em;line-height:1.1;
+  background:linear-gradient(90deg,#fff 0%,var(--cy) 45%,var(--vi) 100%);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+  filter:drop-shadow(0 0 14px rgba(0,240,255,.35))}
+.hero .sub{margin:.55rem 0 .7rem;color:#8ea3bd;font:400 .95rem 'JetBrains Mono',monospace}
+.chip{display:inline-block;padding:.12rem .65rem;margin:0 .4rem .2rem 0;border-radius:4px;
+  border:1px solid var(--line);color:var(--cy);font:600 .68rem 'JetBrains Mono',monospace;letter-spacing:.12em}
+.note{color:#5d718a;font:400 .72rem 'JetBrains Mono',monospace;margin-top:.5rem}
+
+/* section labels */
+.sec{margin:.9rem 0 .3rem;font:600 .7rem 'JetBrains Mono',monospace;letter-spacing:.2em;
+  text-transform:uppercase;color:var(--cy);opacity:.85}
+.sec::before{content:"// ";opacity:.5}
+.cap{font-size:.82rem;color:#9db0c7;margin:.25rem 0}
+.cap b{color:#e6edf7}
+
+/* chat = glass panels */
+[data-testid="stChatMessage"]{background:var(--glass);border:1px solid var(--line);border-radius:14px;
+  backdrop-filter:blur(8px);padding:1rem 1.1rem;margin-bottom:.7rem}
+[data-testid="stChatMessage"]:has([data-testid="stChatMessageAvatarAssistant"]){border-left:3px solid var(--cy);
+  box-shadow:-8px 0 24px -14px var(--cy)}
+[data-testid="stChatMessage"]:has([data-testid="stChatMessageAvatarUser"]){border-left:3px solid var(--vi)}
+
+/* input */
+[data-testid="stChatInput"]{border:1px solid var(--line);border-radius:14px;background:rgba(8,12,24,.85)}
+[data-testid="stChatInput"]:focus-within{border-color:var(--cy);box-shadow:0 0 0 1px var(--cy),0 0 22px rgba(0,240,255,.25)}
+
+/* buttons */
+.stButton>button,.stDownloadButton>button{background:transparent;color:#d8e6f5;border:1px solid var(--line);
+  border-radius:10px;font:600 .8rem 'JetBrains Mono',monospace;transition:all .2s}
+.stButton>button:hover,.stDownloadButton>button:hover{border-color:var(--cy);color:var(--cy);
+  box-shadow:0 0 16px rgba(0,240,255,.3);transform:translateY(-1px)}
+.stButton>button[kind="primary"]{background:linear-gradient(90deg,var(--cy),var(--vi));color:#03060c;border:none;
+  box-shadow:0 0 18px rgba(0,240,255,.35)}
+.stButton>button[kind="primary"]:hover{color:#03060c;box-shadow:0 0 28px rgba(139,92,246,.55)}
+
+/* containers */
+[data-testid="stExpander"]{border:1px solid var(--line);border-radius:10px;background:rgba(10,16,30,.45)}
+[data-testid="stVerticalBlockBorderWrapper"]:has(.report-mark){border-color:var(--cy)!important;
+  box-shadow:0 0 28px -10px var(--cy);background:var(--glass)}
+[data-testid="stSidebar"]{background:linear-gradient(180deg,#070b16,#05070d);border-right:1px solid var(--line)}
+[data-testid="stProgress"] div[role="progressbar"]>div{background:linear-gradient(90deg,var(--cy),var(--vi))}
+::-webkit-scrollbar{width:8px}::-webkit-scrollbar-thumb{background:#14304a;border-radius:8px}
 </style>
 """
-
-
-def card(icon, title, text, src=None):
-    extra = f'<span class="src">{src}</span>' if src else ""
-    return f'<div class="card"><h4>{icon} {title}</h4><p>{text}</p>{extra}</div>'
-
-
-def welcome_html():
-    caps = "".join(card(i, t, d) for i, t, d in CAPABILITIES)
-    tools = "".join(card(i, t, d, f"Source: {s}") for _, i, t, s, d, _ in TOOL_INFO)
-    return (f'<div class="sec">Capabilities</div><div class="grid">{caps}</div>'
-            f'<div class="sec">Tools</div><div class="grid">{tools}</div>')
 
 
 # ----------------------------------------------------------------------------
@@ -550,6 +583,12 @@ with st.sidebar:
             st.write(desc)
             st.caption(f"Source: {source}")
 
+    st.markdown('<div class="sec">Capabilities</div>', unsafe_allow_html=True)
+    with st.expander("What this agent can do"):
+        for icon, title, desc in CAPABILITIES:
+            st.markdown(f'<div class="cap">{icon} <b>{title}</b><br>{desc}</div>',
+                        unsafe_allow_html=True)
+
     st.divider()
     if st.button("🗑️ Clear conversation", use_container_width=True):
         for key in ("messages", "findings"):
@@ -559,24 +598,23 @@ with st.sidebar:
 
 # ---- Main ------------------------------------------------------------------
 st.markdown(
-    '<div class="hero"><h1>🛡️ Security Consultant Agent</h1>'
-    '<p>Ask a security question or describe your setup. The agent checks real data '
-    'sources, and a reviewer model verifies the answer before you see it.</p>'
-    '<span class="chip">CVE lookup</span><span class="chip">CISA KEV</span>'
-    '<span class="chip">SPF / DMARC / DKIM</span><span class="chip">Breach check</span>'
-    '<span class="chip">Reviewer model</span><span class="chip">Reports</span></div>',
+    '<div class="hero"><div class="status"><span class="dot"></span>SYSTEM ONLINE · REVIEWER ACTIVE</div>'
+    '<h1>SECURITY CONSULTANT</h1>'
+    '<div class="sub">Real threat data. Verified answers.</div>'
+    '<span class="chip">LIVE DATA</span><span class="chip">AI-REVIEWED</span><span class="chip">EXPORTABLE</span>'
+    '<div class="note">Check only your own or a test email. Never type real passwords or secrets.</div></div>',
     unsafe_allow_html=True)
-st.info("Only check your own email address or a test one, and never type real passwords or secrets here.")
 
 welcome = st.empty()
 if not st.session_state.messages:
     with welcome.container():
-        st.markdown(welcome_html(), unsafe_allow_html=True)
-        st.markdown('<div class="sec">Try an example</div>', unsafe_allow_html=True)
+        st.markdown('<div class="sec">Quick scan</div>', unsafe_allow_html=True)
         cols = st.columns(len(TOOL_INFO))
         for col, (_, icon, title, _s, _d, example) in zip(cols, TOOL_INFO):
             if col.button(f"{icon} {title}", help=example, use_container_width=True):
                 st.session_state.queued = example
+        st.markdown('<div class="note">…or describe your setup below and get a tailored assessment.</div>',
+                    unsafe_allow_html=True)
 
 for m in st.session_state.messages:
     with st.chat_message(m["role"]):
@@ -588,13 +626,14 @@ for m in st.session_state.messages:
 
 if st.session_state.report:
     with st.container(border=True):
-        st.markdown("### 📄 Security report")
+        st.markdown('<span class="report-mark"></span>', unsafe_allow_html=True)
+        st.markdown('<div class="sec">Security report</div>', unsafe_allow_html=True)
         st.markdown(st.session_state.report)
         c1, c2 = st.columns(2)
-        c1.download_button("⬇️ Download Markdown", st.session_state.report,
+        c1.download_button("⬇️ Markdown", st.session_state.report,
                            file_name="security-report.md", mime="text/markdown",
                            use_container_width=True)
-        c2.download_button("⬇️ Download HTML (print to PDF)",
+        c2.download_button("⬇️ HTML (print to PDF)",
                            report_to_html(st.session_state.report),
                            file_name="security-report.html", mime="text/html",
                            use_container_width=True)
