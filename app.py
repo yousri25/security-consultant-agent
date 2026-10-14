@@ -4,15 +4,15 @@ import streamlit as st
 from google import genai
 from google.genai import types
 
-# Model names taken from your own AI Studio list. Tried in order on failure.
-CONSULTANT_MODELS = ["gemini-3.8-flash", "gemini-3.7-flash", "gemini-2.5-flash"]
-REVIEWER_MODELS = ["gemini-3.5-flash-lite", "gemini-2.5-flash-lite", "gemini-2.5-flash"]
+# Only models from your own AI Studio list that are open to new accounts.
+CONSULTANT_MODELS = ["gemini-3.8-flash", "gemini-3.7-flash", "gemini-3.5-flash"]
+REVIEWER_MODELS = ["gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-3.8-flash"]
 MAX_RETRIES = 1        # extra attempts if the reviewer rejects
 MAX_QUESTIONS = 15     # per session, protects the free quota
 
 client = genai.Client(
     api_key=st.secrets["GEMINI_API_KEY"],
-    http_options=types.HttpOptions(timeout=45000),   # 45 s per call
+    http_options=types.HttpOptions(timeout=120000),   # 120 s per call
 )
 
 CONSULTANT_PROMPT = """You are a cybersecurity consultant advising small organizations.
@@ -32,22 +32,22 @@ Reply ONLY with JSON: {"approved": true/false, "feedback": "what to fix"}"""
 
 
 def generate(models, contents, config):
-    """Try each model in order. On any error, retry once on overload,
-    then move on to the next model."""
-    last_error = None
+    """Try each model in order, retrying once on overload.
+    If everything fails, raise ONE error listing what happened to every model."""
+    errors = []
     for model in models:
         for attempt in range(2):
             try:
                 return client.models.generate_content(
                     model=model, contents=contents, config=config)
             except Exception as e:
-                last_error = e
                 msg = str(e)
                 if attempt == 0 and ("503" in msg or "429" in msg):
                     time.sleep(1.5)
                     continue
+                errors.append(f"- {model}: {type(e).__name__}: {msg[:300]}")
                 break   # go to next model
-    raise last_error
+    raise RuntimeError("All models failed:\n" + "\n".join(errors))
 
 
 def consultant(messages, draft=None, feedback=None):
@@ -107,9 +107,11 @@ if prompt := st.chat_input("Describe your setup or ask a security question"):
     with st.chat_message("assistant"):
         try:
             with st.status("Consultant is drafting an answer...", expanded=True) as status:
+                t0 = time.time()
                 answer = consultant(st.session_state.messages)
+                status.write(f"Draft 1 ready after {time.time() - t0:.0f}s.")
                 for attempt in range(MAX_RETRIES + 1):
-                    status.write(f"Draft {attempt + 1} ready. Reviewer is checking it...")
+                    status.write("Reviewer is checking it...")
                     verdict = review(prompt, answer)
                     if verdict.get("approved"):
                         status.write("✅ Reviewer approved the answer.")
@@ -129,4 +131,4 @@ if prompt := st.chat_input("Describe your setup or ask a security question"):
             # Remove the unanswered question so the chat history stays valid
             st.session_state.messages.pop()
             st.session_state.count -= 1
-            st.error(f"The request failed. Please try again in a minute.\n\nDetails: {e}")
+            st.error(f"The request failed.\n\n{e}")
