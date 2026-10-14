@@ -1,14 +1,27 @@
 import json
 import re
 import time
+from urllib.parse import quote
+
+import dns.resolver
+import requests
 import streamlit as st
 from openai import OpenAI
 
-# Preferred models, best first. The app keeps only the ones your key can actually use.
-CONSULTANT_PREFS = ["openai/gpt-oss-120b", "llama-3.3-70b-versatile", "openai/gpt-oss-20b", "llama-3.1-8b-instant"]
+# Preferred models, best first. The app keeps only the ones your key can use.
+CONSULTANT_PREFS = ["openai/gpt-oss-120b", "llama-3.3-70b-versatile", "openai/gpt-oss-20b"]
 REVIEWER_PREFS = ["llama-3.1-8b-instant", "openai/gpt-oss-20b", "llama-3.3-70b-versatile"]
 MAX_RETRIES = 1        # extra attempts if the reviewer rejects
 MAX_QUESTIONS = 20     # per session, protects the free quota
+MAX_TOOL_ROUNDS = 4    # tool-calling rounds per answer
+HTTP_TIMEOUT = 15
+UA = {"User-Agent": "security-consultant-school-project"}
+
+NVD_URL = "https://services.nvd.nist.gov/rest/json/cves/2.0"
+KEV_URL = "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json"
+BREACH_URL = "https://api.xposedornot.com/v1/check-email/"
+EMAIL_RE = re.compile(r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}")
+DOMAIN_RE = re.compile(r"(?:[A-Za-z0-9](?:[A-Za-z0-9\-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z]{2,}")
 
 client = OpenAI(
     api_key=st.secrets["GROQ_API_KEY"],
@@ -19,30 +32,251 @@ client = OpenAI(
 CONSULTANT_PROMPT = """You are a cybersecurity consultant advising small organizations.
 
 How to behave:
-- If the user greets you or says something vague, reply in 1-2 short sentences and
-  ask what they want help with. Do NOT produce a checklist.
-- If the user describes a problem but you lack key details (OS, network size, what
-  data is involved, what tools they use), ask at most 3 short clarifying questions
-  first, and give only a brief first-pass answer.
-- Once you have enough context, give a tailored assessment: the main risks, a
-  severity (low/medium/high/critical) for each, and prioritized fixes.
-- Match the length of your answer to the question. Never exceed about 400 words.
-- Only defensive advice. Refuse to help attack systems the user does not own,
-  and explain why in one or two sentences.
-- Do not invent CVEs, tools or commands. If unsure, say so."""
+- Greetings or vague messages: reply in 1-2 short sentences and ask what they need.
+- If key details are missing (OS, network size, tools, data involved), ask at most 3
+  short clarifying questions and give only a brief first-pass answer.
+- With enough context, give a tailored assessment: main risks, a severity
+  (low/medium/high/critical) for each, and prioritized fixes.
+- Match answer length to the question. Never exceed about 400 words.
+- Only defensive advice. Refuse to help attack systems the user does not own and
+  explain why in one or two sentences.
+
+Tools (use them instead of guessing):
+- lookup_cve: when the user mentions a CVE ID or a specific product/version.
+- check_kev: after finding a CVE, check whether it is known to be exploited in the
+  wild. If it is, say it must be patched first.
+- check_email_domain_security: when the user gives a domain or an email address and
+  asks about email security, spoofing or phishing protection.
+- check_email_breach: ONLY when the user gives an email address and asks whether it
+  was exposed in data breaches. Remind them to check only their own or a test address.
+
+Rules for tool results:
+- Never invent CVE IDs, scores or breach names. Use only what the tools returned.
+- If a tool returns an error, say plainly that the check could not be completed.
+  Never present a failed check as a clean result.
+- "Not found in breaches" does NOT mean safe; say so.
+- DKIM "not found" only means common selectors were not found, not that DKIM is absent."""
 
 REVIEWER_PROMPT = """You are a strict reviewer of cybersecurity consultant answers.
-Check the answer against these criteria:
-1. It fits the question. A greeting or vague message must get a short reply that
-   asks for details. REJECT long generic checklists written without context.
-2. Technically accurate (no invented CVEs, tools or commands).
-3. Specific to the user's situation once they gave details.
-4. Defensive only; nothing that helps attack systems.
+You get the conversation, the raw tool results (if any), and the consultant's answer.
+Check:
+1. It fits the question. A greeting or vague message must get a short reply asking
+   for details. REJECT long generic checklists written without context.
+2. Every CVE ID, score, breach name or DNS finding in the answer must appear in the
+   tool results. REJECT anything invented or contradicted by the tool results.
+3. If a tool returned an error, the answer must say the check failed. REJECT any
+   answer that presents a failed check as a clean result.
+4. Technically accurate, specific to the user's situation, and defensive only.
 5. Reasonable length (under about 400 words).
 Reply with ONLY a JSON object, no other text:
 {"approved": true or false, "feedback": "what to fix"}"""
 
 
+# ----------------------------------------------------------------------------
+# Tools
+# ----------------------------------------------------------------------------
+def _nvd_key():
+    try:
+        return st.secrets["NVD_API_KEY"]
+    except Exception:
+        return None
+
+
+def lookup_cve(query):
+    query = (query or "").strip()
+    if not query:
+        return {"error": "Empty query."}
+    headers = dict(UA)
+    if _nvd_key():
+        headers["apiKey"] = _nvd_key()
+    if re.fullmatch(r"CVE-\d{4}-\d{4,7}", query, re.I):
+        params = {"cveId": query.upper()}
+    else:
+        params = {"keywordSearch": query, "resultsPerPage": 20}
+    try:
+        r = requests.get(NVD_URL, params=params, headers=headers, timeout=HTTP_TIMEOUT)
+        if r.status_code in (403, 429):
+            return {"error": "NVD rate limit reached. Try again in about a minute."}
+        r.raise_for_status()
+        data = r.json()
+    except Exception as e:
+        return {"error": f"Could not reach the NVD database: {e}"}
+
+    items = []
+    for v in data.get("vulnerabilities", []):
+        c = v.get("cve", {})
+        desc = next((d["value"] for d in c.get("descriptions", [])
+                     if d.get("lang") == "en"), "")
+        score = sev = None
+        for k in ("cvssMetricV40", "cvssMetricV31", "cvssMetricV30", "cvssMetricV2"):
+            if c.get("metrics", {}).get(k):
+                m = c["metrics"][k][0]
+                score = m.get("cvssData", {}).get("baseScore")
+                sev = m.get("cvssData", {}).get("baseSeverity") or m.get("baseSeverity")
+                break
+        items.append({"id": c.get("id"), "published": (c.get("published") or "")[:10],
+                      "cvss": score, "severity": sev, "description": desc[:350]})
+    items.sort(key=lambda x: x["published"], reverse=True)
+    return {"total_matches": data.get("totalResults"), "shown": items[:5],
+            "note": "Keyword searches return a sample, not every match."}
+
+
+@st.cache_data(ttl=21600)
+def _load_kev():
+    r = requests.get(KEV_URL, headers=UA, timeout=HTTP_TIMEOUT)
+    r.raise_for_status()
+    return r.json()["vulnerabilities"]
+
+
+def check_kev(cve_id):
+    cve_id = (cve_id or "").strip().upper()
+    if not re.fullmatch(r"CVE-\d{4}-\d{4,7}", cve_id):
+        return {"error": "Invalid CVE ID format."}
+    try:
+        vulns = _load_kev()
+    except Exception as e:
+        return {"error": f"Could not load the CISA KEV list: {e}"}
+    for v in vulns:
+        if v.get("cveID") == cve_id:
+            return {"cve": cve_id, "in_kev": True,
+                    "product": f"{v.get('vendorProject')} {v.get('product')}",
+                    "name": v.get("vulnerabilityName"),
+                    "date_added": v.get("dateAdded"),
+                    "required_action": v.get("requiredAction"),
+                    "used_in_ransomware": v.get("knownRansomwareCampaignUse")}
+    return {"cve": cve_id, "in_kev": False,
+            "note": "Not in the CISA KEV list. This does not prove it is not exploited."}
+
+
+def _txt(name):
+    res = dns.resolver.Resolver()
+    res.lifetime = 5
+    try:
+        answers = res.resolve(name, "TXT")
+    except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer):
+        return []
+    return ["".join(s.decode("utf-8", "ignore") for s in rr.strings) for rr in answers]
+
+
+def check_email_domain_security(domain_or_email):
+    d = (domain_or_email or "").strip().lower()
+    if "@" in d:
+        d = d.split("@")[-1]
+    if not DOMAIN_RE.fullmatch(d):
+        return {"error": "Invalid domain."}
+    try:
+        spf = [t for t in _txt(d) if t.lower().startswith("v=spf1")]
+        dmarc = [t for t in _txt("_dmarc." + d) if t.lower().startswith("v=dmarc1")]
+    except Exception as e:
+        return {"error": f"DNS lookup failed: {e}"}
+
+    out = {"domain": d}
+    if not spf:
+        out["spf"] = {"found": False, "verdict": "MISSING: anyone can more easily spoof this domain."}
+    else:
+        rec = spf[0]
+        if "-all" in rec:
+            verdict = "Strict (-all): good."
+        elif "~all" in rec:
+            verdict = "Soft fail (~all): acceptable, -all is stricter."
+        elif "?all" in rec:
+            verdict = "Neutral (?all): weak."
+        elif "+all" in rec:
+            verdict = "DANGEROUS (+all): allows anyone to send as this domain."
+        else:
+            verdict = "No 'all' mechanism found: unclear or incomplete policy."
+        out["spf"] = {"found": True, "record": rec[:300], "verdict": verdict}
+
+    if not dmarc:
+        out["dmarc"] = {"found": False, "verdict": "MISSING: no policy against spoofed mail."}
+    else:
+        rec = dmarc[0]
+        m = re.search(r"\bp=(none|quarantine|reject)", rec, re.I)
+        policy = m.group(1).lower() if m else "unknown"
+        verdicts = {"none": "p=none: monitoring only, spoofed mail is still delivered.",
+                    "quarantine": "p=quarantine: good.",
+                    "reject": "p=reject: strongest.",
+                    "unknown": "Policy could not be parsed."}
+        out["dmarc"] = {"found": True, "record": rec[:300], "policy": policy,
+                        "verdict": verdicts[policy], "reporting_enabled": "rua=" in rec.lower()}
+
+    found = []
+    for sel in ("google", "selector1", "selector2", "default", "k1", "s1"):
+        try:
+            if any("v=dkim1" in t.lower() for t in _txt(f"{sel}._domainkey.{d}")):
+                found.append(sel)
+        except Exception:
+            pass
+    out["dkim"] = {"selectors_found": found,
+                   "note": "Only common selectors were tried. Not found does not prove DKIM is absent."}
+    return out
+
+
+def check_email_breach(email):
+    email = (email or "").strip()
+    if not EMAIL_RE.fullmatch(email):
+        return {"error": "Invalid email address."}
+    try:
+        r = requests.get(BREACH_URL + quote(email), headers=UA, timeout=HTTP_TIMEOUT)
+    except Exception as e:
+        return {"error": f"Could not reach the breach database: {e}"}
+    if r.status_code == 404:
+        return {"email": email, "found_in_breaches": False,
+                "note": "Not found in this database. That does NOT prove the email is safe."}
+    if r.status_code == 429:
+        return {"error": "Breach database rate limit reached. Try again later."}
+    if r.status_code != 200:
+        return {"error": f"Breach database returned HTTP {r.status_code}."}
+    try:
+        raw = r.json().get("breaches", [])
+        names = []
+        for item in raw:
+            names.extend(item if isinstance(item, list) else [item])
+    except Exception as e:
+        return {"error": f"Unexpected response from the breach database: {e}"}
+    return {"email": email, "found_in_breaches": bool(names),
+            "breach_count": len(names), "breaches": names[:25]}
+
+
+def _fn(name, desc, prop, prop_desc):
+    return {"type": "function", "function": {
+        "name": name, "description": desc,
+        "parameters": {"type": "object",
+                       "properties": {prop: {"type": "string", "description": prop_desc}},
+                       "required": [prop]}}}
+
+
+TOOLS = [
+    _fn("lookup_cve", "Search the NIST NVD for a CVE ID or a product/version keyword.",
+        "query", "A CVE ID like CVE-2021-44228, or keywords like 'openssl 3.0'."),
+    _fn("check_kev", "Check if a CVE is in CISA's Known Exploited Vulnerabilities list.",
+        "cve_id", "A CVE ID like CVE-2021-44228."),
+    _fn("check_email_domain_security", "Check a domain's SPF, DMARC and DKIM email protections.",
+        "domain_or_email", "A domain like example.com, or an email address."),
+    _fn("check_email_breach", "Check whether an email address appears in known data breaches.",
+        "email", "The email address to check."),
+]
+TOOL_FUNCS = {
+    "lookup_cve": lambda a: lookup_cve(a.get("query")),
+    "check_kev": lambda a: check_kev(a.get("cve_id")),
+    "check_email_domain_security": lambda a: check_email_domain_security(a.get("domain_or_email")),
+    "check_email_breach": lambda a: check_email_breach(a.get("email")),
+}
+
+
+def run_tool(name, raw_args):
+    try:
+        args = json.loads(raw_args) if raw_args else {}
+    except Exception:
+        args = {}
+    fn = TOOL_FUNCS.get(name)
+    result = fn(args) if fn else {"error": f"Unknown tool {name}"}
+    return args, json.dumps(result, ensure_ascii=False)[:3500]
+
+
+# ----------------------------------------------------------------------------
+# Models
+# ----------------------------------------------------------------------------
 @st.cache_resource(ttl=3600)
 def available_models():
     try:
@@ -57,52 +291,86 @@ def pick(prefs):
     return chosen or list(prefs)
 
 
-def generate(models, messages):
-    """Try each model in order. Retry once on overload (503).
-    If everything fails, raise ONE error listing what happened to each model."""
-    errors = []
-    for model in models:
-        for attempt in range(2):
-            try:
-                r = client.chat.completions.create(model=model, messages=messages)
-                return r.choices[0].message.content or ""
-            except Exception as e:
-                msg = str(e)
-                if attempt == 0 and "503" in msg:
-                    time.sleep(1.5)
-                    continue
-                errors.append(f"- {model}: {msg[:250]}")
-                break   # next model
-    raise RuntimeError("All models failed:\n" + "\n".join(errors))
+def chat(model, messages, tools=None):
+    kwargs = {"model": model, "messages": messages}
+    if tools:
+        kwargs["tools"] = tools
+    for attempt in range(2):
+        try:
+            return client.chat.completions.create(**kwargs).choices[0].message
+        except Exception as e:
+            if attempt == 0 and "503" in str(e):
+                time.sleep(1.5)
+                continue
+            raise
 
 
-def consultant(history, draft=None, feedback=None):
-    messages = [{"role": "system", "content": CONSULTANT_PROMPT}] + [
+def consultant(history, on_event, draft=None, feedback=None, evidence=""):
+    base = [{"role": "system", "content": CONSULTANT_PROMPT}] + [
         {"role": m["role"], "content": m["content"]} for m in history
     ]
     if draft and feedback:
-        messages.append({"role": "assistant", "content": draft})
-        messages.append({"role": "user", "content":
-            f"A reviewer rejected your answer: {feedback}\nRewrite it, fixing these issues."})
-    return generate(pick(CONSULTANT_PREFS), messages)
+        base.append({"role": "assistant", "content": draft})
+        note = f"A reviewer rejected your answer: {feedback}\n"
+        if evidence:
+            note += f"Tool results already gathered:\n{evidence}\n"
+        base.append({"role": "user", "content": note + "Rewrite it, fixing these issues."})
+
+    errors = []
+    for model in pick(CONSULTANT_PREFS):
+        msgs = list(base)
+        log = []
+        try:
+            for rnd in range(MAX_TOOL_ROUNDS + 1):
+                msg = chat(model, msgs, TOOLS if rnd < MAX_TOOL_ROUNDS else None)
+                if not msg.tool_calls:
+                    if not (msg.content or "").strip():
+                        raise RuntimeError("empty reply")
+                    return msg.content, log
+                msgs.append({
+                    "role": "assistant", "content": msg.content or "",
+                    "tool_calls": [{"id": tc.id, "type": "function",
+                                    "function": {"name": tc.function.name,
+                                                 "arguments": tc.function.arguments}}
+                                   for tc in msg.tool_calls]})
+                for tc in msg.tool_calls:
+                    args, result = run_tool(tc.function.name, tc.function.arguments)
+                    on_event(f"🔧 `{tc.function.name}` {args}")
+                    log.append(f"{tc.function.name}({json.dumps(args)}) -> {result}")
+                    msgs.append({"role": "tool", "tool_call_id": tc.id, "content": result})
+            raise RuntimeError("too many tool rounds")
+        except Exception as e:
+            errors.append(f"- {model}: {str(e)[:250]}")
+            on_event(f"⚠️ {model} failed, trying the next model...")
+    raise RuntimeError("All models failed:\n" + "\n".join(errors))
 
 
-def review(question, answer):
+def review(history, answer, evidence):
+    convo = "\n".join(f"{m['role'].upper()}: {m['content']}" for m in history[-6:])
     messages = [
         {"role": "system", "content": REVIEWER_PROMPT},
         {"role": "user", "content":
-            f"USER QUESTION:\n{question}\n\nCONSULTANT ANSWER:\n{answer}"},
+            f"CONVERSATION:\n{convo}\n\nTOOL RESULTS:\n{evidence or 'none'}\n\n"
+            f"CONSULTANT ANSWER TO CHECK:\n{answer}"},
     ]
-    text = generate(pick(REVIEWER_PREFS), messages)
-    try:
-        match = re.search(r"\{.*\}", text, re.DOTALL)
-        return json.loads(match.group(0))
-    except Exception:
-        return {"approved": True, "feedback": ""}
+    errors = []
+    for model in pick(REVIEWER_PREFS):
+        try:
+            text = chat(model, messages).content or ""
+            match = re.search(r"\{.*\}", text, re.DOTALL)
+            return json.loads(match.group(0))
+        except Exception as e:
+            errors.append(f"- {model}: {str(e)[:200]}")
+    # If no reviewer works, do not block the answer
+    return {"approved": True, "feedback": ""}
 
 
+# ----------------------------------------------------------------------------
+# UI
+# ----------------------------------------------------------------------------
 st.title("🛡️ Security Consultant Agent")
-st.caption("Consultant model + reviewer model. Defensive advice only.")
+st.caption("Consultant model + tools (CVE, CISA KEV, email security, breach check) + reviewer model. Defensive advice only.")
+st.info("Only check your own email address or a test one, and never type real passwords or secrets here.")
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
@@ -123,13 +391,16 @@ if prompt := st.chat_input("Describe your setup or ask a security question"):
 
     with st.chat_message("assistant"):
         try:
-            with st.status("Consultant is drafting an answer...", expanded=True) as status:
+            with st.status("Consultant is working...", expanded=True) as status:
                 t0 = time.time()
-                answer = consultant(st.session_state.messages)
+                all_evidence = []
+                answer, log = consultant(st.session_state.messages, status.write)
+                all_evidence += log
                 status.write(f"Draft 1 ready after {time.time() - t0:.0f}s.")
                 for attempt in range(MAX_RETRIES + 1):
                     status.write("Reviewer is checking it...")
-                    verdict = review(prompt, answer)
+                    evidence = "\n".join(all_evidence)[-6000:]
+                    verdict = review(st.session_state.messages, answer, evidence)
                     if verdict.get("approved"):
                         status.write("✅ Reviewer approved the answer.")
                         break
@@ -138,9 +409,12 @@ if prompt := st.chat_input("Describe your setup or ask a security question"):
                         status.write("Retry limit reached, returning the latest draft.")
                         break
                     status.write("Consultant is rewriting...")
-                    answer = consultant(st.session_state.messages, answer,
-                                        verdict.get("feedback", ""))
-                status.update(label="Done (click to see the review steps)",
+                    answer, log = consultant(st.session_state.messages, status.write,
+                                             draft=answer,
+                                             feedback=verdict.get("feedback", ""),
+                                             evidence=evidence)
+                    all_evidence += log
+                status.update(label="Done (click to see the steps)",
                               state="complete", expanded=False)
             st.markdown(answer)
             st.session_state.messages.append({"role": "assistant", "content": answer})
@@ -149,7 +423,3 @@ if prompt := st.chat_input("Describe your setup or ask a security question"):
             st.session_state.messages.pop()
             st.session_state.count -= 1
             st.error(f"The request failed.\n\n{e}")
-
-with st.sidebar:
-    with st.expander("Models available to this key"):
-        st.write(available_models() or "Could not list models")
