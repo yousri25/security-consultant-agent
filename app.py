@@ -1,18 +1,19 @@
 import json
+import re
 import time
 import streamlit as st
-from google import genai
-from google.genai import types
+from openai import OpenAI
 
-# Only models from your own AI Studio list that are open to new accounts.
-CONSULTANT_MODELS = ["gemini-3.8-flash", "gemini-3.7-flash", "gemini-3.5-flash"]
-REVIEWER_MODELS = ["gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-3.8-flash"]
+# Preferred models, best first. The app keeps only the ones your key can actually use.
+CONSULTANT_PREFS = ["openai/gpt-oss-120b", "llama-3.3-70b-versatile", "openai/gpt-oss-20b", "llama-3.1-8b-instant"]
+REVIEWER_PREFS = ["llama-3.1-8b-instant", "openai/gpt-oss-20b", "llama-3.3-70b-versatile"]
 MAX_RETRIES = 1        # extra attempts if the reviewer rejects
-MAX_QUESTIONS = 15     # per session, protects the free quota
+MAX_QUESTIONS = 20     # per session, protects the free quota
 
-client = genai.Client(
-    api_key=st.secrets["GEMINI_API_KEY"],
-    http_options=types.HttpOptions(timeout=120000),   # 120 s per call
+client = OpenAI(
+    api_key=st.secrets["GROQ_API_KEY"],
+    base_url="https://api.groq.com/openai/v1",
+    timeout=60,
 )
 
 CONSULTANT_PROMPT = """You are a cybersecurity consultant advising small organizations.
@@ -28,58 +29,64 @@ Check the answer against these criteria:
 2. Specific and actionable, not generic.
 3. Defensive only; nothing that helps attack systems.
 4. Actually answers the user's question, with severity/priorities.
-Reply ONLY with JSON: {"approved": true/false, "feedback": "what to fix"}"""
+Reply with ONLY a JSON object, no other text:
+{"approved": true or false, "feedback": "what to fix"}"""
 
 
-def generate(models, contents, config):
-    """Try each model in order, retrying once on overload.
-    If everything fails, raise ONE error listing what happened to every model."""
+@st.cache_resource(ttl=3600)
+def available_models():
+    try:
+        return [m.id for m in client.models.list().data]
+    except Exception:
+        return []
+
+
+def pick(prefs):
+    avail = available_models()
+    chosen = [m for m in prefs if m in avail] if avail else list(prefs)
+    return chosen or list(prefs)
+
+
+def generate(models, messages):
+    """Try each model in order. Retry once on overload (503).
+    If everything fails, raise ONE error listing what happened to each model."""
     errors = []
     for model in models:
         for attempt in range(2):
             try:
-                return client.models.generate_content(
-                    model=model, contents=contents, config=config)
+                r = client.chat.completions.create(model=model, messages=messages)
+                return r.choices[0].message.content or ""
             except Exception as e:
                 msg = str(e)
-                if attempt == 0 and ("503" in msg or "429" in msg):
+                if attempt == 0 and "503" in msg:
                     time.sleep(1.5)
                     continue
-                errors.append(f"- {model}: {type(e).__name__}: {msg[:300]}")
-                break   # go to next model
+                errors.append(f"- {model}: {msg[:250]}")
+                break   # next model
     raise RuntimeError("All models failed:\n" + "\n".join(errors))
 
 
-def consultant(messages, draft=None, feedback=None):
-    contents = [
-        types.Content(
-            role="user" if m["role"] == "user" else "model",
-            parts=[types.Part(text=m["content"])],
-        )
-        for m in messages
+def consultant(history, draft=None, feedback=None):
+    messages = [{"role": "system", "content": CONSULTANT_PROMPT}] + [
+        {"role": m["role"], "content": m["content"]} for m in history
     ]
     if draft and feedback:
-        contents.append(types.Content(role="model", parts=[types.Part(text=draft)]))
-        contents.append(types.Content(role="user", parts=[types.Part(
-            text=f"A reviewer rejected your answer: {feedback}\nRewrite it, fixing these issues.")]))
-    r = generate(
-        CONSULTANT_MODELS, contents,
-        types.GenerateContentConfig(system_instruction=CONSULTANT_PROMPT),
-    )
-    return r.text
+        messages.append({"role": "assistant", "content": draft})
+        messages.append({"role": "user", "content":
+            f"A reviewer rejected your answer: {feedback}\nRewrite it, fixing these issues."})
+    return generate(pick(CONSULTANT_PREFS), messages)
 
 
 def review(question, answer):
-    r = generate(
-        REVIEWER_MODELS,
-        f"USER QUESTION:\n{question}\n\nCONSULTANT ANSWER:\n{answer}",
-        types.GenerateContentConfig(
-            system_instruction=REVIEWER_PROMPT,
-            response_mime_type="application/json",
-        ),
-    )
+    messages = [
+        {"role": "system", "content": REVIEWER_PROMPT},
+        {"role": "user", "content":
+            f"USER QUESTION:\n{question}\n\nCONSULTANT ANSWER:\n{answer}"},
+    ]
+    text = generate(pick(REVIEWER_PREFS), messages)
     try:
-        return json.loads(r.text)
+        match = re.search(r"\{.*\}", text, re.DOTALL)
+        return json.loads(match.group(0))
     except Exception:
         return {"approved": True, "feedback": ""}
 
@@ -132,3 +139,7 @@ if prompt := st.chat_input("Describe your setup or ask a security question"):
             st.session_state.messages.pop()
             st.session_state.count -= 1
             st.error(f"The request failed.\n\n{e}")
+
+with st.sidebar:
+    with st.expander("Models available to this key"):
+        st.write(available_models() or "Could not list models")
