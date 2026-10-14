@@ -4,9 +4,7 @@ import streamlit as st
 from google import genai
 from google.genai import types
 
-# Models are tried in order. If the first is overloaded, the next one is used.
-# Edit these to match the model names listed in your AI Studio account.
-FALLBACK_MODELS = ["gemini-3.8-flash", "gemini-3.8-flash-lite"]
+PRIMARY_MODEL = "gemini-3.8-flash"   # change to a name from the sidebar list if needed
 MAX_RETRIES = 2        # extra attempts if the reviewer rejects
 MAX_QUESTIONS = 15     # per session, protects the free quota
 
@@ -27,11 +25,34 @@ Check the answer against these criteria:
 Reply ONLY with JSON: {"approved": true/false, "feedback": "what to fix"}"""
 
 
+@st.cache_resource
+def available_models():
+    """Ask Google which models this key can use for generateContent."""
+    names = []
+    try:
+        for m in client.models.list():
+            actions = getattr(m, "supported_actions", None) or []
+            if "generateContent" in actions:
+                names.append(m.name.replace("models/", ""))
+    except Exception:
+        pass
+    return names
+
+
+def model_order():
+    """Primary model first, then other real flash models as fallbacks."""
+    skip = ("image", "tts", "live", "audio", "embedding", "robotics", "computer")
+    others = [n for n in available_models()
+              if "flash" in n and n != PRIMARY_MODEL
+              and not any(s in n for s in skip)]
+    return [PRIMARY_MODEL] + others[:3]
+
+
 def generate(contents, config):
     """Call Gemini with retries on overload (503) or rate limit (429),
-    then fall back to the next model in FALLBACK_MODELS."""
+    then fall back to the next model."""
     last_error = None
-    for model in FALLBACK_MODELS:
+    for model in model_order():
         for attempt in range(3):
             try:
                 return client.models.generate_content(
@@ -124,3 +145,7 @@ if prompt := st.chat_input("Describe your setup or ask a security question"):
             st.session_state.messages.pop()
             st.session_state.count -= 1
             st.error(f"The request failed. Please try again in a minute.\n\nDetails: {e}")
+
+with st.sidebar:
+    with st.expander("Available models"):
+        st.write(available_models() or "Could not list models")
