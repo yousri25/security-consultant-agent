@@ -3,7 +3,7 @@ import streamlit as st
 from google import genai
 from google.genai import types
 
-MODEL = "gemini-2.5-flash"
+MODEL = "gemini-3.8-flash"
 MAX_RETRIES = 2        # extra attempts if the reviewer rejects
 MAX_QUESTIONS = 15     # per session, protects the free quota
 
