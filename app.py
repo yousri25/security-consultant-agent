@@ -4,17 +4,23 @@ import streamlit as st
 from google import genai
 from google.genai import types
 
-PRIMARY_MODEL = "gemini-3.8-flash"   # change to a name from the sidebar list if needed
-MAX_RETRIES = 2        # extra attempts if the reviewer rejects
+# Model names taken from your own AI Studio list. Tried in order on failure.
+CONSULTANT_MODELS = ["gemini-3.8-flash", "gemini-3.7-flash", "gemini-2.5-flash"]
+REVIEWER_MODELS = ["gemini-3.5-flash-lite", "gemini-2.5-flash-lite", "gemini-2.5-flash"]
+MAX_RETRIES = 1        # extra attempts if the reviewer rejects
 MAX_QUESTIONS = 15     # per session, protects the free quota
 
-client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
+client = genai.Client(
+    api_key=st.secrets["GEMINI_API_KEY"],
+    http_options=types.HttpOptions(timeout=45000),   # 45 s per call
+)
 
 CONSULTANT_PROMPT = """You are a cybersecurity consultant advising small organizations.
 For each question: identify the risks, rate severity (low/medium/high/critical),
 and give concrete, prioritized fixes. Ask for missing context (OS, network size,
 data involved) when needed. Only defensive advice: refuse to help attack systems
-the user does not own, and explain why. Be specific and avoid vague generalities."""
+the user does not own, and explain why. Be specific and avoid vague generalities.
+Keep answers focused and under about 400 words."""
 
 REVIEWER_PROMPT = """You are a strict reviewer of cybersecurity advice.
 Check the answer against these criteria:
@@ -25,47 +31,22 @@ Check the answer against these criteria:
 Reply ONLY with JSON: {"approved": true/false, "feedback": "what to fix"}"""
 
 
-@st.cache_resource
-def available_models():
-    """Ask Google which models this key can use for generateContent."""
-    names = []
-    try:
-        for m in client.models.list():
-            actions = getattr(m, "supported_actions", None) or []
-            if "generateContent" in actions:
-                names.append(m.name.replace("models/", ""))
-    except Exception:
-        pass
-    return names
-
-
-def model_order():
-    """Primary model first, then other real flash models as fallbacks."""
-    skip = ("image", "tts", "live", "audio", "embedding", "robotics", "computer")
-    others = [n for n in available_models()
-              if "flash" in n and n != PRIMARY_MODEL
-              and not any(s in n for s in skip)]
-    return [PRIMARY_MODEL] + others[:3]
-
-
-def generate(contents, config):
-    """Call Gemini with retries on overload (503) or rate limit (429),
-    then fall back to the next model."""
+def generate(models, contents, config):
+    """Try each model in order. On any error, retry once on overload,
+    then move on to the next model."""
     last_error = None
-    for model in model_order():
-        for attempt in range(3):
+    for model in models:
+        for attempt in range(2):
             try:
                 return client.models.generate_content(
                     model=model, contents=contents, config=config)
             except Exception as e:
                 last_error = e
                 msg = str(e)
-                if "503" in msg or "429" in msg:
-                    time.sleep(2 * (attempt + 1))   # wait 2s, 4s, 6s
+                if attempt == 0 and ("503" in msg or "429" in msg):
+                    time.sleep(1.5)
                     continue
-                if "404" in msg:
-                    break                           # bad model name: try next model
-                raise                               # other errors: stop
+                break   # go to next model
     raise last_error
 
 
@@ -82,7 +63,7 @@ def consultant(messages, draft=None, feedback=None):
         contents.append(types.Content(role="user", parts=[types.Part(
             text=f"A reviewer rejected your answer: {feedback}\nRewrite it, fixing these issues.")]))
     r = generate(
-        contents,
+        CONSULTANT_MODELS, contents,
         types.GenerateContentConfig(system_instruction=CONSULTANT_PROMPT),
     )
     return r.text
@@ -90,6 +71,7 @@ def consultant(messages, draft=None, feedback=None):
 
 def review(question, answer):
     r = generate(
+        REVIEWER_MODELS,
         f"USER QUESTION:\n{question}\n\nCONSULTANT ANSWER:\n{answer}",
         types.GenerateContentConfig(
             system_instruction=REVIEWER_PROMPT,
@@ -124,28 +106,27 @@ if prompt := st.chat_input("Describe your setup or ask a security question"):
 
     with st.chat_message("assistant"):
         try:
-            log = []
-            with st.spinner("Consultant is working..."):
+            with st.status("Consultant is drafting an answer...", expanded=True) as status:
                 answer = consultant(st.session_state.messages)
                 for attempt in range(MAX_RETRIES + 1):
+                    status.write(f"Draft {attempt + 1} ready. Reviewer is checking it...")
                     verdict = review(prompt, answer)
-                    log.append(f"Attempt {attempt + 1}: "
-                               f"{'approved' if verdict.get('approved') else 'rejected'}"
-                               f" {verdict.get('feedback', '')}")
-                    if verdict.get("approved") or attempt == MAX_RETRIES:
+                    if verdict.get("approved"):
+                        status.write("✅ Reviewer approved the answer.")
                         break
+                    status.write(f"❌ Reviewer rejected: {verdict.get('feedback', '')}")
+                    if attempt == MAX_RETRIES:
+                        status.write("Retry limit reached, returning the latest draft.")
+                        break
+                    status.write("Consultant is rewriting...")
                     answer = consultant(st.session_state.messages, answer,
                                         verdict.get("feedback", ""))
+                status.update(label="Done (click to see the review steps)",
+                              state="complete", expanded=False)
             st.markdown(answer)
-            with st.expander("Reviewer log"):
-                st.write("\n\n".join(log))
             st.session_state.messages.append({"role": "assistant", "content": answer})
         except Exception as e:
             # Remove the unanswered question so the chat history stays valid
             st.session_state.messages.pop()
             st.session_state.count -= 1
             st.error(f"The request failed. Please try again in a minute.\n\nDetails: {e}")
-
-with st.sidebar:
-    with st.expander("Available models"):
-        st.write(available_models() or "Could not list models")
